@@ -4,9 +4,19 @@ import path from 'path';
 import { UserNote, UserStatus } from '@/types';
 import { containsChinese } from '@/utils/validation';
 
+// 定义API响应类型
+type ApiResponse = UserNote[] | {
+  error: string;
+  invalidUsers?: {
+    normal: any[];
+    yellow: any[];
+    black: any[];
+  };
+};
+
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<UserNote[]>
+  res: NextApiResponse<ApiResponse>
 ) {
   try {
     const normalListPath = path.join(process.cwd(), 'src/data/normal_list.json');
