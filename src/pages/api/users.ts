@@ -4,15 +4,21 @@ import path from 'path';
 import { UserNote, UserStatus } from '@/types';
 import { containsChinese } from '@/utils/validation';
 
+// 定义文件中用户数据的类型
+interface UserData {
+  user_id: string;
+  tag: string;
+}
+
 // 定义API响应类型
 type ApiResponse = {
   success: boolean;
   data?: UserNote[];
   error?: string;
   invalidUsers?: {
-    normal: any[];
-    yellow: any[];
-    black: any[];
+    normal: UserData[];
+    yellow: UserData[];
+    black: UserData[];
   };
 };
 
@@ -34,7 +40,7 @@ export default async function handler(
     const twitterIdsPath = path.join(process.cwd(), 'src/data/twitter_ids.json');
 
     // 确保所有文件存在
-    const ensureFileExists = (filePath: string, defaultContent = { users: [] }) => {
+    const ensureFileExists = (filePath: string, defaultContent = { users: [] as UserData[] }) => {
       if (!fs.existsSync(filePath)) {
         fs.writeFileSync(filePath, JSON.stringify(defaultContent, null, 2));
         return defaultContent;
@@ -49,7 +55,7 @@ export default async function handler(
     const twitterIds: TwitterIds = ensureFileExists(twitterIdsPath, { users: {} });
 
     // 检查用户ID
-    const checkUserIds = (users: any[], listName: string) => {
+    const checkUserIds = (users: UserData[], listName: string) => {
       const invalidUsers = users.filter(user => containsChinese(user.user_id));
       if (invalidUsers.length > 0) {
         console.error(`发现包含中文字符的user_id在${listName}:`, 
@@ -81,7 +87,7 @@ export default async function handler(
     }
 
     // 转换数据格式的函数
-    const transformUser = (user: any, status: UserStatus): UserNote => ({
+    const transformUser = (user: UserData, status: UserStatus): UserNote => ({
       userid: twitterIds.users[user.user_id] || '',
       username: user.user_id,
       tag: user.tag,
@@ -91,9 +97,9 @@ export default async function handler(
     });
 
     // 转换数据
-    const normalList = normalData.map((user: any) => transformUser(user, 'normal'));
-    const yellowList = yellowData.map((user: any) => transformUser(user, 'warning'));
-    const blackList = blackData.map((user: any) => transformUser(user, 'danger'));
+    const normalList = normalData.map(user => transformUser(user, 'normal'));
+    const yellowList = yellowData.map(user => transformUser(user, 'warning'));
+    const blackList = blackData.map(user => transformUser(user, 'danger'));
 
     const allUsers = [...normalList, ...yellowList, ...blackList];
     
