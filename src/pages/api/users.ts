@@ -28,7 +28,7 @@ type ApiResponse = {
 };
 
 // 定义 twitter_ids 的类型
-interface TwitterIds {
+interface TwitterIdsContent {
   users: {
     [key: string]: string;
   };
@@ -54,11 +54,21 @@ export default async function handler(
       return JSON.parse(fs.readFileSync(filePath, 'utf8'));
     };
 
+    // 修改读取 twitter_ids.json 的部分
+    const ensureTwitterIdsExists = (filePath: string): TwitterIdsContent => {
+      if (!fs.existsSync(filePath)) {
+        const defaultContent: TwitterIdsContent = { users: {} };
+        fs.writeFileSync(filePath, JSON.stringify(defaultContent, null, 2));
+        return defaultContent;
+      }
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    };
+
     // 读取所有文件
     const normalData = ensureFileExists(normalListPath).users;
     const yellowData = ensureFileExists(yellowListPath).users;
     const blackData = ensureFileExists(blackListPath).users;
-    const twitterIds = ensureFileExists(twitterIdsPath) as TwitterIds;
+    const twitterIds = ensureTwitterIdsExists(twitterIdsPath);
 
     // 检查用户ID
     const checkUserIds = (users: UserData[], listName: string): UserData[] => {
