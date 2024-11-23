@@ -16,12 +16,18 @@ export default function Home() {
   useEffect(() => {
     getUserData()
       .then(data => {
-        setAllUsers(data);
+        if (Array.isArray(data)) {
+          setAllUsers(data);
+        } else {
+          setAllUsers([]);
+          console.error('Invalid data format:', data);
+        }
         setLoading(false);
       })
       .catch(err => {
         setError('加载数据失败');
         setLoading(false);
+        console.error('Error loading data:', err);
       });
   }, []);
 
