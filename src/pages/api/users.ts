@@ -10,6 +10,11 @@ interface UserData {
   tag: string;
 }
 
+// 定义文件内容的类型
+interface FileContent {
+  users: UserData[];
+}
+
 // 定义API响应类型
 type ApiResponse = {
   success: boolean;
@@ -40,8 +45,9 @@ export default async function handler(
     const twitterIdsPath = path.join(process.cwd(), 'src/data/twitter_ids.json');
 
     // 确保所有文件存在
-    const ensureFileExists = (filePath: string, defaultContent = { users: [] as UserData[] }) => {
+    const ensureFileExists = (filePath: string): FileContent => {
       if (!fs.existsSync(filePath)) {
+        const defaultContent: FileContent = { users: [] };
         fs.writeFileSync(filePath, JSON.stringify(defaultContent, null, 2));
         return defaultContent;
       }
@@ -52,10 +58,10 @@ export default async function handler(
     const normalData = ensureFileExists(normalListPath).users;
     const yellowData = ensureFileExists(yellowListPath).users;
     const blackData = ensureFileExists(blackListPath).users;
-    const twitterIds: TwitterIds = ensureFileExists(twitterIdsPath, { users: {} });
+    const twitterIds = ensureFileExists(twitterIdsPath) as TwitterIds;
 
     // 检查用户ID
-    const checkUserIds = (users: UserData[], listName: string) => {
+    const checkUserIds = (users: UserData[], listName: string): UserData[] => {
       const invalidUsers = users.filter(user => containsChinese(user.user_id));
       if (invalidUsers.length > 0) {
         console.error(`发现包含中文字符的user_id在${listName}:`, 
