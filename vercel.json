@@ -16,5 +16,8 @@
   ],
   "env": {
     "ADMIN_PASSWORD": "@lcqk-admin-password"
-  }
+  },
+  "buildCommand": "next build",
+  "installCommand": "yarn install",
+  "framework": "nextjs"
 } 
