@@ -5,8 +5,10 @@ import { UserNote, UserStatus } from '@/types';
 import { containsChinese } from '@/utils/validation';
 
 // 定义API响应类型
-type ApiResponse = UserNote[] | {
-  error: string;
+type ApiResponse = {
+  success: boolean;
+  data?: UserNote[];
+  error?: string;
   invalidUsers?: {
     normal: any[];
     yellow: any[];
@@ -24,13 +26,22 @@ export default async function handler(
     const blackListPath = path.join(process.cwd(), 'src/data/black_list.json');
     const twitterIdsPath = path.join(process.cwd(), 'src/data/twitter_ids.json');
 
-    // 读取所有文件
-    const normalData = JSON.parse(fs.readFileSync(normalListPath, 'utf8')).users;
-    const yellowData = JSON.parse(fs.readFileSync(yellowListPath, 'utf8')).users;
-    const blackData = JSON.parse(fs.readFileSync(blackListPath, 'utf8')).users;
-    const twitterIds = JSON.parse(fs.readFileSync(twitterIdsPath, 'utf8')).users;
+    // 确保所有文件存在
+    const ensureFileExists = (filePath: string, defaultContent = { users: [] }) => {
+      if (!fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, JSON.stringify(defaultContent, null, 2));
+        return defaultContent;
+      }
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    };
 
-    // 在 transformUser 函数之前添加检查
+    // 读取所有文件
+    const normalData = ensureFileExists(normalListPath).users;
+    const yellowData = ensureFileExists(yellowListPath).users;
+    const blackData = ensureFileExists(blackListPath).users;
+    const twitterIds = ensureFileExists(twitterIdsPath, { users: {} }).users;
+
+    // 检查用户ID
     const checkUserIds = (users: any[], listName: string) => {
       const invalidUsers = users.filter(user => containsChinese(user.user_id));
       if (invalidUsers.length > 0) {
@@ -51,21 +62,20 @@ export default async function handler(
 
     // 如果发现无效的user_id，返回错误信息
     if (normalInvalid.length > 0 || yellowInvalid.length > 0 || blackInvalid.length > 0) {
-      const invalidUsers = {
-        normal: normalInvalid,
-        yellow: yellowInvalid,
-        black: blackInvalid
-      };
-      console.error('发现无效的user_id:', invalidUsers);
       return res.status(400).json({ 
+        success: false,
         error: 'Invalid user_ids found',
-        invalidUsers 
+        invalidUsers: {
+          normal: normalInvalid,
+          yellow: yellowInvalid,
+          black: blackInvalid
+        }
       });
     }
 
     // 转换数据格式的函数
     const transformUser = (user: any, status: UserStatus): UserNote => ({
-      userid: twitterIds[user.user_id] || '',  // 使用保存的Twitter ID
+      userid: twitterIds[user.user_id] || '',
       username: user.user_id,
       tag: user.tag,
       status: status,
@@ -80,9 +90,15 @@ export default async function handler(
 
     const allUsers = [...normalList, ...yellowList, ...blackList];
     
-    res.status(200).json(allUsers);
+    res.status(200).json({
+      success: true,
+      data: allUsers
+    });
   } catch (error) {
     console.error('Error loading users:', error);
-    res.status(500).json([]);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load users'
+    });
   }
 } 
