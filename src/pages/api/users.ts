@@ -16,6 +16,13 @@ type ApiResponse = {
   };
 };
 
+// 定义 twitter_ids 的类型
+interface TwitterIds {
+  users: {
+    [key: string]: string;
+  };
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ApiResponse>
@@ -39,7 +46,7 @@ export default async function handler(
     const normalData = ensureFileExists(normalListPath).users;
     const yellowData = ensureFileExists(yellowListPath).users;
     const blackData = ensureFileExists(blackListPath).users;
-    const twitterIds = ensureFileExists(twitterIdsPath, { users: {} }).users;
+    const twitterIds: TwitterIds = ensureFileExists(twitterIdsPath, { users: {} });
 
     // 检查用户ID
     const checkUserIds = (users: any[], listName: string) => {
@@ -75,7 +82,7 @@ export default async function handler(
 
     // 转换数据格式的函数
     const transformUser = (user: any, status: UserStatus): UserNote => ({
-      userid: twitterIds[user.user_id] || '',
+      userid: twitterIds.users[user.user_id] || '',
       username: user.user_id,
       tag: user.tag,
       status: status,
