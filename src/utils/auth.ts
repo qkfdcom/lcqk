@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.ADMIN_PASSWORD || 'fallback_secret';
+const JWT_SECRET = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD || 'fallback_secret';
 
 export function isAuthenticated(
   req: NextApiRequest,
