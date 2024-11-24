@@ -16,5 +16,3 @@
 - Tailwind CSS
 - Google Sheets API
 
-## 本地开发
-1. 克隆项目
