@@ -1,23 +1,23 @@
-import { verify } from 'jsonwebtoken';
-import type { NextApiRequest, NextApiResponse } from 'next';
+import { NextApiRequest, NextApiResponse } from 'next';
+import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.ADMIN_PASSWORD || 'fallback_secret';
 
 export function isAuthenticated(
   req: NextApiRequest,
   res: NextApiResponse,
-  next: () => void
+  next: () => Promise<void>
 ) {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    
     if (!token) {
-      throw new Error('No token provided');
+      return res.status(401).json({ message: 'No token provided' });
     }
 
-    verify(token, JWT_SECRET);
-    next();
+    jwt.verify(token, JWT_SECRET);
+    return next();
   } catch (error) {
-    res.status(401).json({ message: 'Unauthorized' });
+    console.error('Authentication error:', error);
+    return res.status(401).json({ message: 'Invalid token' });
   }
 } 

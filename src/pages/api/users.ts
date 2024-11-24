@@ -1,133 +1,38 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import fs from 'fs';
 import path from 'path';
-import { UserNote, UserStatus } from '@/types';
-import { containsChinese } from '@/utils/validation';
-
-// 定义文件中用户数据的类型
-interface UserData {
-  user_id: string;
-  tag: string;
-}
-
-// 定义文件内容的类型
-interface FileContent {
-  users: UserData[];
-}
-
-// 定义API响应类型
-type ApiResponse = {
-  success: boolean;
-  data?: UserNote[];
-  error?: string;
-  invalidUsers?: {
-    normal: UserData[];
-    yellow: UserData[];
-    black: UserData[];
-  };
-};
-
-// 定义 twitter_ids 的类型
-interface TwitterIdsContent {
-  users: {
-    [key: string]: string;
-  };
-}
+import { isAuthenticated } from '@/utils/auth';
+import { UserNote, ApiResponse } from '@/types';
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ApiResponse>
 ) {
-  try {
-    const normalListPath = path.join(process.cwd(), 'src/data/normal_list.json');
-    const yellowListPath = path.join(process.cwd(), 'src/data/yellow_list.json');
-    const blackListPath = path.join(process.cwd(), 'src/data/black_list.json');
-    const twitterIdsPath = path.join(process.cwd(), 'src/data/twitter_ids.json');
+  isAuthenticated(req, res, async () => {
+    try {
+      // 读取所有JSON文件
+      const dataDir = path.join(process.cwd(), 'src/data');
+      const normalList = JSON.parse(fs.readFileSync(path.join(dataDir, 'normal_list.json'), 'utf8'));
+      const yellowList = JSON.parse(fs.readFileSync(path.join(dataDir, 'yellow_list.json'), 'utf8'));
+      const blackList = JSON.parse(fs.readFileSync(path.join(dataDir, 'black_list.json'), 'utf8'));
 
-    // 确保所有文件存在
-    const ensureFileExists = (filePath: string): FileContent => {
-      if (!fs.existsSync(filePath)) {
-        const defaultContent: FileContent = { users: [] };
-        fs.writeFileSync(filePath, JSON.stringify(defaultContent, null, 2));
-        return defaultContent;
-      }
-      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    };
+      // 合并所有用户数据并添加状态标记
+      const allUsers: UserNote[] = [
+        ...normalList.users.map((user: any) => ({ ...user, status: 'normal' as const })),
+        ...yellowList.users.map((user: any) => ({ ...user, status: 'warning' as const })),
+        ...blackList.users.map((user: any) => ({ ...user, status: 'danger' as const }))
+      ];
 
-    // 修改读取 twitter_ids.json 的部分
-    const ensureTwitterIdsExists = (filePath: string): TwitterIdsContent => {
-      if (!fs.existsSync(filePath)) {
-        const defaultContent: TwitterIdsContent = { users: {} };
-        fs.writeFileSync(filePath, JSON.stringify(defaultContent, null, 2));
-        return defaultContent;
-      }
-      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    };
-
-    // 读取所有文件
-    const normalData = ensureFileExists(normalListPath).users;
-    const yellowData = ensureFileExists(yellowListPath).users;
-    const blackData = ensureFileExists(blackListPath).users;
-    const twitterIds = ensureTwitterIdsExists(twitterIdsPath);
-
-    // 检查用户ID
-    const checkUserIds = (users: UserData[], listName: string): UserData[] => {
-      const invalidUsers = users.filter(user => containsChinese(user.user_id));
-      if (invalidUsers.length > 0) {
-        console.error(`发现包含中文字符的user_id在${listName}:`, 
-          invalidUsers.map(u => ({
-            user_id: u.user_id,
-            tag: u.tag
-          }))
-        );
-      }
-      return invalidUsers;
-    };
-
-    // 检查各个列表
-    const normalInvalid = checkUserIds(normalData, 'normal_list');
-    const yellowInvalid = checkUserIds(yellowData, 'yellow_list');
-    const blackInvalid = checkUserIds(blackData, 'black_list');
-
-    // 如果发现无效的user_id，返回错误信息
-    if (normalInvalid.length > 0 || yellowInvalid.length > 0 || blackInvalid.length > 0) {
-      return res.status(400).json({ 
+      res.status(200).json({
+        success: true,
+        data: allUsers
+      });
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({
         success: false,
-        error: 'Invalid user_ids found',
-        invalidUsers: {
-          normal: normalInvalid,
-          yellow: yellowInvalid,
-          black: blackInvalid
-        }
+        error: 'Failed to fetch users'
       });
     }
-
-    // 转换数据格式的函数
-    const transformUser = (user: UserData, status: UserStatus): UserNote => ({
-      userid: twitterIds.users[user.user_id] || '',
-      username: user.user_id,
-      tag: user.tag,
-      status: status,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    });
-
-    // 转换数据
-    const normalList = normalData.map(user => transformUser(user, 'normal'));
-    const yellowList = yellowData.map(user => transformUser(user, 'warning'));
-    const blackList = blackData.map(user => transformUser(user, 'danger'));
-
-    const allUsers = [...normalList, ...yellowList, ...blackList];
-    
-    res.status(200).json({
-      success: true,
-      data: allUsers
-    });
-  } catch (error) {
-    console.error('Error loading users:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to load users'
-    });
-  }
+  });
 } 

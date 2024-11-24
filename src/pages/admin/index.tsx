@@ -2,30 +2,46 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { UserNote } from '@/types';
 
+// 添加类型定义
+interface User {
+  username: string;
+  userid: string;
+  tag: string;
+  status: 'normal' | 'warning' | 'danger';
+  created_at: string;
+  updated_at: string;
+}
+
 export default function AdminPage() {
   const [password, setPassword] = useState('');
-  const [code2FA, setCode2FA] = useState('');
-  const [setupMode, setSetupMode] = useState(false);
-  const [qrCode, setQrCode] = useState('');
-  const [secret, setSecret] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<'users' | 'import' | 'settings' | 'logs'>('users');
-  const [users, setUsers] = useState<UserNote[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
 
   useEffect(() => {
     // 检查登录状态
     const token = localStorage.getItem('adminToken');
+    console.log('Auth token:', token ? 'exists' : 'missing');
     if (token) {
       setIsLoggedIn(true);
     }
   }, []);
 
-  const handleSetup2FA = async () => {
+  useEffect(() => {
+    console.log('Login state changed:', isLoggedIn);
+    if (isLoggedIn) {
+      fetchUsers();
+      fetchLogs();
+    }
+  }, [isLoggedIn]);
+
+  const handleLogin = async () => {
     try {
-      const response = await fetch('/api/auth/setup-2fa', {
+      console.log('Attempting login...');
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -33,39 +49,17 @@ export default function AdminPage() {
         body: JSON.stringify({ password }),
       });
 
+      console.log('Login response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
-        setQrCode(data.qrCode);
-        setSecret(data.secret);
-        setSetupMode(true);
-      } else {
-        alert('设置失败');
-      }
-    } catch (error) {
-      console.error('Setup error:', error);
-      alert('设置失败');
-    }
-  };
-
-  const handleLogin = async () => {
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          password,
-          code: code2FA 
-        }),
-      });
-
-      if (response.ok) {
-        const { token } = await response.json();
-        localStorage.setItem('adminToken', token);
+        console.log('Login successful, setting token');
+        localStorage.setItem('adminToken', data.token);
         setIsLoggedIn(true);
       } else {
-        alert('登录失败');
+        const errorData = await response.json();
+        console.error('Login failed:', errorData);
+        alert(errorData.message || '登录失败');
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -74,15 +68,57 @@ export default function AdminPage() {
   };
 
   const handleLogout = () => {
+    console.log('Logging out...');
     localStorage.removeItem('adminToken');
     setIsLoggedIn(false);
+    setUsers([]); // 清空用户数据
   };
 
   // 获取用户数据
   const fetchUsers = async () => {
-    const response = await fetch('/api/users');
-    const data = await response.json();
-    setUsers(data);
+    try {
+      const token = localStorage.getItem('adminToken');
+      if (!token) {
+        console.error('No auth token found');
+        setUsers([]);
+        return;
+      }
+
+      console.log('Fetching users with token:', token);
+
+      const response = await fetch('/api/users', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('Response status:', response.status);
+
+      const result = await response.json();
+      console.log('Raw API Response:', result);
+
+      if (result.success && Array.isArray(result.data)) {
+        // 添加数据验证
+        const validUsers = result.data.filter(user => {
+          const isValid = user && user.username && user.tag && user.status;
+          if (!isValid) {
+            console.error('Invalid user data:', user);
+          }
+          return isValid;
+        });
+
+        console.log('Valid users count:', validUsers.length);
+        setUsers(validUsers);
+      } else {
+        console.error('Invalid response format:', result);
+        setUsers([]);
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      setUsers([]);
+    }
   };
 
   // 获取操作日志
@@ -91,13 +127,6 @@ export default function AdminPage() {
     const data = await response.json();
     setLogs(data);
   };
-
-  useEffect(() => {
-    if (isLoggedIn) {
-      fetchUsers();
-      fetchLogs();
-    }
-  }, [isLoggedIn]);
 
   // 导出数据
   const handleExport = (type: 'all' | 'normal' | 'warning' | 'danger') => async () => {
@@ -205,59 +234,21 @@ export default function AdminPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="bg-white p-8 rounded-lg shadow-md w-96">
           <h1 className="text-2xl font-bold text-center mb-6">后台管理登录</h1>
-          {setupMode ? (
-            <div className="space-y-4">
-              <div className="text-center mb-4">
-                <img src={qrCode} alt="2FA QR Code" className="mx-auto" />
-                <p className="mt-2 text-sm text-gray-600">
-                  请使用谷歌验证器扫描二维码
-                </p>
-                <p className="mt-1 text-xs text-gray-500">
-                  密钥: {secret}
-                </p>
-              </div>
-              <button
-                onClick={() => setSetupMode(false)}
-                className="w-full px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700"
-              >
-                完成设置
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <input
-                type="password"
-                placeholder="请输入管理密码"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="请输入验证码"
-                  value={code2FA}
-                  onChange={(e) => setCode2FA(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <CountdownTimer />
-              </div>
-              <button
-                onClick={handleLogin}
-                className="w-full px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700"
-              >
-                登录
-              </button>
-              <div className="text-center">
-                <button
-                  onClick={handleSetup2FA}
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                >
-                  设置双重认证
-                </button>
-              </div>
-            </div>
-          )}
+          <div className="space-y-4">
+            <input
+              type="password"
+              placeholder="请输入管理密码"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={handleLogin}
+              className="w-full px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700"
+            >
+              登录
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -314,6 +305,10 @@ export default function AdminPage() {
         {activeTab === 'users' && (
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-bold mb-4">用户管理</h2>
+            <div className="mb-4 text-sm text-gray-500">
+              登录状态: {isLoggedIn ? '已登录' : '未登录'}<br />
+              用户数量: {users.length}
+            </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead>
@@ -333,25 +328,33 @@ export default function AdminPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {users.map((user) => (
-                    <tr key={user.username}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        @{user.username}
-                      </td>
-                      <td className="px-6 py-4">{user.tag}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <StatusBadge status={user.status} />
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <button className="text-indigo-600 hover:text-indigo-900 mr-2">
-                          编辑
-                        </button>
-                        <button className="text-red-600 hover:text-red-900">
-                          删除
-                        </button>
+                  {users.length > 0 ? (
+                    users.map((user) => (
+                      <tr key={user.username}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          @{user.username}
+                        </td>
+                        <td className="px-6 py-4">{user.tag}</td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <StatusBadge status={user.status} />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <button className="text-indigo-600 hover:text-indigo-900 mr-2">
+                            编辑
+                          </button>
+                          <button className="text-red-600 hover:text-red-900">
+                            删除
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
+                        暂无数据
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>

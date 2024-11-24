@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import fs from 'fs';
 import path from 'path';
 import { UserNote } from '@/types';
-import { isAuthenticated } from '@/utils/auth';
+import { isAuthenticated, backupData } from '@/utils/auth';
 
 export default async function handler(
   req: NextApiRequest,
@@ -47,8 +47,15 @@ export default async function handler(
         return user;
       });
 
-      // 写回文件，保持原有的数据结构
-      fs.writeFileSync(filePath, JSON.stringify({ users: updatedUsers }, null, 2));
+      // 在写入文件前添加备份
+      try {
+        backupData();
+        fs.writeFileSync(filePath, JSON.stringify({ users: updatedUsers }, null, 2));
+      } catch (error) {
+        console.error('Error backing up data:', error);
+        res.status(500).json({ message: 'Failed to backup data' });
+        return;
+      }
 
       res.status(200).json({ message: 'Updated successfully' });
     } catch (error) {
